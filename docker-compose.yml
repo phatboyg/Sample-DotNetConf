@@ -1,0 +1,8 @@
+﻿version: '2.3'
+services:
+  postgres:
+    image: "postgres"
+    environment:
+      - "POSTGRES_PASSWORD=secret"
+    ports:
+      - "5432:5432"
