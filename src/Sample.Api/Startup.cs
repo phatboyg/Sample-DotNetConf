@@ -1,14 +1,24 @@
 namespace Sample.Api
 {
+    using System.Linq;
     using System.Reflection;
-    using Domain;
+    using System.Threading.Tasks;
+    using Components;
+    using Components.StateMachines;
+    using Contracts;
+    using MassTransit;
     using Microsoft.AspNetCore.Builder;
+    using Microsoft.AspNetCore.Diagnostics.HealthChecks;
     using Microsoft.AspNetCore.Hosting;
+    using Microsoft.AspNetCore.Http;
     using Microsoft.EntityFrameworkCore;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Diagnostics.HealthChecks;
     using Microsoft.Extensions.Hosting;
     using Microsoft.OpenApi.Models;
+    using Newtonsoft.Json;
+    using Newtonsoft.Json.Linq;
 
 
     public class Startup
@@ -23,6 +33,27 @@ namespace Sample.Api
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddMassTransit(x =>
+            {
+                x.AddSagaStateMachine<OrderStateMachine, OrderState>()
+                    .EntityFrameworkRepository(r =>
+                    {
+                        r.ExistingDbContext<OrderDbContext>();
+                        r.UsePostgres();
+                    });
+
+                x.AddRequestClient<AcceptOrder>();
+                x.AddRequestClient<GetOrder>();
+
+                x.UsingAzureServiceBus((context, cfg) =>
+                {
+                    cfg.Host(Configuration.GetConnectionString("AzureServiceBus"));
+
+                    cfg.ConfigureEndpoints(context);
+                });
+            });
+            services.AddMassTransitHostedService(true);
+
             services.AddControllers();
             services.AddSwaggerGen(c =>
             {
@@ -59,10 +90,31 @@ namespace Sample.Api
 
             app.UseAuthorization();
 
+            app.UseHealthChecks("/health/ready", new HealthCheckOptions
+            {
+                Predicate = check => check.Tags.Contains("ready"),
+                ResponseWriter = HealthCheckResponseWriter
+            });
+            app.UseHealthChecks("/health/live", new HealthCheckOptions { ResponseWriter = HealthCheckResponseWriter });
+
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
             });
+        }
+
+        static Task HealthCheckResponseWriter(HttpContext context, HealthReport result)
+        {
+            var json = new JObject(
+                new JProperty("status", result.Status.ToString()),
+                new JProperty("results", new JObject(result.Entries.Select(entry => new JProperty(entry.Key, new JObject(
+                    new JProperty("status", entry.Value.Status.ToString()),
+                    new JProperty("description", entry.Value.Description),
+                    new JProperty("data", JObject.FromObject(entry.Value.Data))))))));
+
+            context.Response.ContentType = "application/json";
+
+            return context.Response.WriteAsync(json.ToString(Formatting.Indented));
         }
     }
 }

@@ -1,7 +1,7 @@
 namespace Sample.Api
 {
     using System.Threading.Tasks;
-    using Domain;
+    using Components;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;

@@ -1,13 +1,12 @@
 ﻿namespace Sample.Api.Controllers
 {
     using System;
-    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
-    using Domain;
+    using Contracts;
+    using MassTransit;
     using Microsoft.AspNetCore.Http;
     using Microsoft.AspNetCore.Mvc;
-    using Microsoft.EntityFrameworkCore;
     using Microsoft.Extensions.Logging;
 
 
@@ -16,13 +15,18 @@
     public class OrderController :
         ControllerBase
     {
-        readonly OrderDbContext _dbContext;
         readonly ILogger<OrderController> _logger;
+        readonly IPublishEndpoint _publishEndpoint;
+        readonly IRequestClient<AcceptOrder> _acceptOrderClient;
+        readonly IRequestClient<GetOrder> _getOrderClient;
 
-        public OrderController(ILogger<OrderController> logger, OrderDbContext dbContext)
+        public OrderController(ILogger<OrderController> logger, IPublishEndpoint publishEndpoint, IRequestClient<AcceptOrder> acceptOrderClient,
+            IRequestClient<GetOrder> getOrderClient)
         {
             _logger = logger;
-            _dbContext = dbContext;
+            _publishEndpoint = publishEndpoint;
+            _acceptOrderClient = acceptOrderClient;
+            _getOrderClient = getOrderClient;
         }
 
         [HttpGet("{orderId}")]
@@ -32,16 +36,28 @@
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var order = await _dbContext.Orders.Where(x => x.OrderId == orderId).SingleOrDefaultAsync(cancellationToken);
-            if (order is null)
-                return NotFound(new { OrderId = orderId });
-
-            return Ok(new OrderModel
+            Response response = await _getOrderClient.GetResponse<Order, OrderNotFound>(new
             {
-                OrderId = order.OrderId,
-                OrderNumber = order.OrderNumber,
-                Status = order.Status.ToString()
-            });
+                orderId,
+            }, cancellationToken);
+
+            return response switch
+            {
+                (_, Order x) => Ok(new OrderModel
+                {
+                    OrderId = x.OrderId,
+                    OrderNumber = x.OrderNumber,
+                    Status = x.Status
+                }),
+                (_, OrderNotFound x) => NotFound(new OrderModel
+                {
+                    OrderId = x.OrderId,
+                }),
+                _ => BadRequest(new OrderModel
+                {
+                    OrderId = orderId,
+                })
+            };
         }
 
         [HttpPost]
@@ -51,46 +67,49 @@
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var order = new Order
+            await _publishEndpoint.Publish<SubmitOrder>(new
+            {
+                orderModel.OrderId,
+                orderModel.OrderNumber
+            }, cancellationToken);
+
+            return Accepted(new OrderModel
             {
                 OrderId = orderModel.OrderId,
                 OrderNumber = orderModel.OrderNumber,
-                Status = OrderStatus.Submitted
-            };
-
-            await _dbContext.AddAsync(order, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return Ok(new OrderModel
-            {
-                OrderId = order.OrderId,
-                OrderNumber = order.OrderNumber,
-                Status = order.Status.ToString()
+                Status = "Submitted"
             });
         }
 
-        [HttpGet("{orderId}/accept")]
+        [HttpPost("{orderId}/accept")]
         [ProducesResponseType(typeof(OrderModel), StatusCodes.Status200OK)]
         public async Task<IActionResult> Accept(Guid orderId, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var order = await _dbContext.Orders.Where(x => x.OrderId == orderId).SingleOrDefaultAsync(cancellationToken);
-            if (order is null)
-                return NotFound(new { OrderId = orderId });
-
-            order.Status = OrderStatus.Accepted;
-
-            _dbContext.Update(order);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return Ok(new OrderModel
+            Response response = await _acceptOrderClient.GetResponse<Order, OrderNotFound>(new
             {
-                OrderId = order.OrderId,
-                OrderNumber = order.OrderNumber,
-                Status = order.Status.ToString()
-            });
+                orderId,
+            }, cancellationToken);
+
+            return response switch
+            {
+                (_, Order x) => Ok(new OrderModel
+                {
+                    OrderId = x.OrderId,
+                    OrderNumber = x.OrderNumber,
+                    Status = x.Status
+                }),
+                (_, OrderNotFound x) => NotFound(new OrderModel
+                {
+                    OrderId = x.OrderId,
+                }),
+                _ => BadRequest(new OrderModel
+                {
+                    OrderId = orderId,
+                })
+            };
         }
     }
 }
