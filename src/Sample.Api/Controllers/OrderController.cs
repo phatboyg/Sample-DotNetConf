@@ -69,7 +69,7 @@
             });
         }
 
-        [HttpGet("{orderId}/accept")]
+        [HttpPost("{orderId}/accept")]
         [ProducesResponseType(typeof(OrderModel), StatusCodes.Status200OK)]
         public async Task<IActionResult> Accept(Guid orderId, CancellationToken cancellationToken)
         {
