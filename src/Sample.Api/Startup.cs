@@ -48,6 +48,7 @@ namespace Sample.Api
                 x.UsingAzureServiceBus((context, cfg) =>
                 {
                     cfg.Host(Configuration.GetConnectionString("AzureServiceBus"));
+                    cfg.AutoStart = true;
 
                     cfg.ConfigureEndpoints(context);
                 });
