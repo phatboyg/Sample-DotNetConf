@@ -16,27 +16,21 @@
         ControllerBase
     {
         readonly ILogger<OrderController> _logger;
-        readonly IPublishEndpoint _publishEndpoint;
-        readonly IRequestClient<AcceptOrder> _acceptOrderClient;
-        readonly IRequestClient<GetOrder> _getOrderClient;
 
-        public OrderController(ILogger<OrderController> logger, IPublishEndpoint publishEndpoint, IRequestClient<AcceptOrder> acceptOrderClient,
-            IRequestClient<GetOrder> getOrderClient)
+        public OrderController(ILogger<OrderController> logger)
         {
             _logger = logger;
-            _publishEndpoint = publishEndpoint;
-            _acceptOrderClient = acceptOrderClient;
-            _getOrderClient = getOrderClient;
         }
 
         [HttpGet("{orderId}")]
         [ProducesResponseType(typeof(OrderModel), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Get(Guid orderId, CancellationToken cancellationToken)
+        public async Task<IActionResult> Get(Guid orderId, CancellationToken cancellationToken,
+            [FromServices] IRequestClient<GetOrder> getOrderClient)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            Response response = await _getOrderClient.GetResponse<Order, OrderNotFound>(new
+            Response response = await getOrderClient.GetResponse<Order, OrderNotFound>(new
             {
                 orderId,
             }, cancellationToken);
@@ -62,12 +56,13 @@
 
         [HttpPost]
         [ProducesResponseType(typeof(OrderModel), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Submit([FromBody] SubmitOrderModel orderModel, CancellationToken cancellationToken)
+        public async Task<IActionResult> Submit([FromBody] SubmitOrderModel orderModel, CancellationToken cancellationToken,
+            [FromServices] IPublishEndpoint publishEndpoint)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            await _publishEndpoint.Publish<SubmitOrder>(new
+            await publishEndpoint.Publish<SubmitOrder>(new
             {
                 orderModel.OrderId,
                 orderModel.OrderNumber
@@ -83,12 +78,13 @@
 
         [HttpPost("{orderId}/accept")]
         [ProducesResponseType(typeof(OrderModel), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Accept(Guid orderId, CancellationToken cancellationToken)
+        public async Task<IActionResult> Accept(Guid orderId, CancellationToken cancellationToken,
+            [FromServices] IRequestClient<AcceptOrder> acceptOrderClient)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            Response response = await _acceptOrderClient.GetResponse<Order, OrderNotFound>(new
+            Response response = await acceptOrderClient.GetResponse<Order, OrderNotFound>(new
             {
                 orderId,
             }, cancellationToken);

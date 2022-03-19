@@ -5,10 +5,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MassTransit.AspNetCore" Version="7.2.4" />
-    <PackageReference Include="MassTransit.Azure.ServiceBus.Core" Version="7.2.4" />
+    <PackageReference Include="MassTransit.Azure.ServiceBus.Core" Version="8.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="5.0.10" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.3.0" />
   </ItemGroup>
 
   <ItemGroup>

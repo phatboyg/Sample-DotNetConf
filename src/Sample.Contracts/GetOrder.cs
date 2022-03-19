@@ -3,7 +3,6 @@ namespace Sample.Contracts
     using System;
     using System.Runtime.CompilerServices;
     using MassTransit;
-    using MassTransit.Topology.Topologies;
 
 
     public record GetOrder

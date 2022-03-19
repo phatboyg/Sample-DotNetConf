@@ -1,6 +1,5 @@
 namespace Sample.Components.StateMachines
 {
-    using Automatonymous;
     using Contracts;
     using MassTransit;
 
@@ -23,7 +22,7 @@ namespace Sample.Components.StateMachines
 
             Initially(
                 When(SubmitOrder)
-                    .Then(x => x.Instance.OrderNumber = x.Data.OrderNumber)
+                    .Then(x => x.Saga.OrderNumber = x.Message.OrderNumber)
                     .TransitionTo(Submitted));
 
             During(Submitted, Accepted,
@@ -31,20 +30,20 @@ namespace Sample.Components.StateMachines
                     .TransitionTo(Accepted)
                     .RespondAsync(x => x.Init<Order>(new
                     {
-                        x.Data.OrderId,
-                        x.Instance.OrderNumber,
-                        Status = x.Instance.CurrentState
+                        x.Message.OrderId,
+                        x.Saga.OrderNumber,
+                        Status = x.Saga.CurrentState
                     })));
 
             DuringAny(
                 When(SubmitOrder)
-                    .Then(x => x.Instance.OrderNumber = x.Data.OrderNumber),
+                    .Then(x => x.Saga.OrderNumber = x.Message.OrderNumber),
                 When(GetOrder)
                     .RespondAsync(x => x.Init<Order>(new
                     {
-                        x.Data.OrderId,
-                        x.Instance.OrderNumber,
-                        Status = x.Instance.CurrentState
+                        x.Message.OrderId,
+                        x.Saga.OrderNumber,
+                        Status = x.StateMachine.Accessor.Get(x)
                     })));
         }
 

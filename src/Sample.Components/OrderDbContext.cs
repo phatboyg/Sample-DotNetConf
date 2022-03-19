@@ -2,7 +2,6 @@ namespace Sample.Components
 {
     using System.Collections.Generic;
     using MassTransit.EntityFrameworkCoreIntegration;
-    using MassTransit.EntityFrameworkCoreIntegration.Mappings;
     using Microsoft.EntityFrameworkCore;
 
 

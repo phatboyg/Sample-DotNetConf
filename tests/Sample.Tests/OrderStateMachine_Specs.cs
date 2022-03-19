@@ -15,11 +15,11 @@
     public class Submitting_an_order_via_the_state_machine
     {
         TestExecutionContext _fixtureContext;
-        InMemoryTestHarness _harness;
+        ITestHarness _harness;
         TestOutputLoggerFactory _loggerFactory;
         OrderStateMachine _machine;
         ServiceProvider _provider;
-        IStateMachineSagaTestHarness<OrderState, OrderStateMachine> _sagaHarness;
+        ISagaStateMachineTestHarness<OrderStateMachine, OrderState> _sagaHarness;
 
         [Test]
         public async Task Should_support_the_status_check()
@@ -34,13 +34,11 @@
 
             await _harness.Consumed.Any<SubmitOrder>(x => x.Context.Message.OrderId == orderId);
 
-            using var scope = _provider.CreateScope();
-
-            var client = scope.ServiceProvider.GetRequiredService<IRequestClient<GetOrder>>();
+            IRequestClient<GetOrder> client = _harness.GetRequestClient<GetOrder>();
 
             Response<Order, OrderNotFound> response = await client.GetResponse<Order, OrderNotFound>(new { orderId });
 
-            Assert.That(response.Is<Order>(out var order), Is.True);
+            Assert.That(response.Is<Order>(out Response<Order> order), Is.True);
             Assert.That(order.Message.Status, Is.EqualTo("Submitted"));
 
             Assert.That(response.Is<OrderNotFound>(out _), Is.False);
@@ -54,32 +52,30 @@
             var services = new ServiceCollection();
             services.AddSingleton<ILoggerFactory>(_ => _loggerFactory);
 
-            services.AddMassTransitInMemoryTestHarness(x =>
+            services.AddMassTransitTestHarness(x =>
             {
                 x.AddSagaStateMachine<OrderStateMachine, OrderState>()
                     .InMemoryRepository();
 
-                x.AddSagaStateMachineTestHarness<OrderStateMachine, OrderState>();
+                x.UsingInMemory((context, cfg) =>
+                {
+                    cfg.UseDelayedMessageScheduler();
 
-                x.AddRequestClient<AcceptOrder>();
-                x.AddRequestClient<GetOrder>();
+                    cfg.ConfigureEndpoints(context);
+                });
             });
 
             _provider = services.BuildServiceProvider(true);
             _provider.ConfigureLogging();
 
-            _harness = _provider.GetRequiredService<InMemoryTestHarness>();
-            _harness.OnConfigureInMemoryBus += configurator =>
-            {
-                configurator.UseDelayedMessageScheduler();
-            };
+            _harness = _provider.GetTestHarness();
 
             _fixtureContext = TestExecutionContext.CurrentContext;
 
             _loggerFactory.Current = _fixtureContext;
 
             await _harness.Start();
-            _sagaHarness = _provider.GetRequiredService<IStateMachineSagaTestHarness<OrderState, OrderStateMachine>>();
+            _sagaHarness = _provider.GetRequiredService<ISagaStateMachineTestHarness<OrderStateMachine, OrderState>>();
             _machine = _provider.GetRequiredService<OrderStateMachine>();
         }
 
@@ -88,14 +84,7 @@
         {
             _loggerFactory.Current = _fixtureContext;
 
-            try
-            {
-                await _harness.Stop();
-            }
-            finally
-            {
-                await _provider.DisposeAsync();
-            }
+            await _provider.DisposeAsync();
         }
     }
 }

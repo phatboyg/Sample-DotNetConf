@@ -1,7 +1,7 @@
 namespace Sample.Tests
 {
     using System;
-    using MassTransit.Context;
+    using MassTransit;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
 

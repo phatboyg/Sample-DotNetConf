@@ -1,12 +1,15 @@
 namespace Sample.Api
 {
+    using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
+    using System.Text.Json;
+    using System.Text.Json.Nodes;
     using System.Threading.Tasks;
     using Components;
     using Components.StateMachines;
-    using Contracts;
     using MassTransit;
+    using MassTransit.Serialization;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Diagnostics.HealthChecks;
     using Microsoft.AspNetCore.Hosting;
@@ -17,8 +20,6 @@ namespace Sample.Api
     using Microsoft.Extensions.Diagnostics.HealthChecks;
     using Microsoft.Extensions.Hosting;
     using Microsoft.OpenApi.Models;
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Linq;
 
 
     public class Startup
@@ -42,9 +43,6 @@ namespace Sample.Api
                         r.UsePostgres();
                     });
 
-                x.AddRequestClient<AcceptOrder>();
-                x.AddRequestClient<GetOrder>();
-
                 x.UsingAzureServiceBus((context, cfg) =>
                 {
                     cfg.Host(Configuration.GetConnectionString("AzureServiceBus"));
@@ -53,7 +51,7 @@ namespace Sample.Api
                     cfg.ConfigureEndpoints(context);
                 });
             });
-            services.AddMassTransitHostedService(true);
+            services.Configure<MassTransitHostOptions>(options => options.WaitUntilStarted = true);
 
             services.AddControllers();
             services.AddSwaggerGen(c =>
@@ -106,16 +104,29 @@ namespace Sample.Api
 
         static Task HealthCheckResponseWriter(HttpContext context, HealthReport result)
         {
-            var json = new JObject(
-                new JProperty("status", result.Status.ToString()),
-                new JProperty("results", new JObject(result.Entries.Select(entry => new JProperty(entry.Key, new JObject(
-                    new JProperty("status", entry.Value.Status.ToString()),
-                    new JProperty("description", entry.Value.Description),
-                    new JProperty("data", JObject.FromObject(entry.Value.Data))))))));
+            return context.Response.WriteAsync(ToJsonString(result));
+        }
 
-            context.Response.ContentType = "application/json";
+        static string ToJsonString(HealthReport result)
+        {
+            var healthResult = new JsonObject
+            {
+                ["status"] = result.Status.ToString(),
+                ["results"] = new JsonObject(result.Entries.Select(entry => new KeyValuePair<string, JsonNode>(entry.Key,
+                    new JsonObject
+                    {
+                        ["status"] = entry.Value.Status.ToString(),
+                        ["description"] = entry.Value.Description,
+                        ["data"] = JsonSerializer.SerializeToNode(entry.Value.Data, SystemTextJsonMessageSerializer.Options)
+                    })))
+            };
 
-            return context.Response.WriteAsync(json.ToString(Formatting.Indented));
+            var options = new JsonSerializerOptions(SystemTextJsonMessageSerializer.Options)
+            {
+                WriteIndented = true,
+            };
+
+            return healthResult.ToJsonString(options);
         }
     }
 }
